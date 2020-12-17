@@ -1,15 +1,15 @@
-module PulseTimer(
+module PulseTimer #(
+		parameter WIDTH = 16
+	) (
 		input envelope,
 		input reset,
 		input clk,
-		output reg[WIDTH-1:0] result
+		output [WIDTH-1:0] result
 		);
 
 	/*
 	Times the length of a pulse in a 16-bit counter incremented on clk
 	*/
-	
-	parameter WIDTH = 16;
 	
 	wire rise_detect;
 	wire fall_detect;
@@ -26,11 +26,11 @@ module PulseTimer(
 	// Is this needed? Can't a register be used?
 	SRLatch srLatch(
 		.set(rise_detect),
-		.reset(fall_detect),
+		.reset(fall_detect | reset),
 		.clk(clk),
 		.q(in_pulse),
 		.q_n()
-		)
+		);
 
 	Counter #(.WIDTH(WIDTH)) counter(
 		.enable(in_pulse),

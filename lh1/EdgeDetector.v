@@ -9,10 +9,6 @@ module EdgeDetector(
 	Detects rising and falling edges and asserts on rise / fall outputs
 	*/
 	
-	initial begin
-		prev <= sig;
-		end
-
 	reg prev; // Store previous state
 
 	always @(posedge clk) begin

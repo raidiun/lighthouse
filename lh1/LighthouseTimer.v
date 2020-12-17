@@ -1,20 +1,22 @@
-module LighthouseTimer(
+module LighthouseTimer #(
+		parameter COUNTER_WIDTH = 32,
+		parameter CLOCKS_PER_US = 16
+	) (
 		input envelope,
 		input data,
 		input clk,
+		input reset,
 		output reg [COUNTER_WIDTH-1:0] sync_A_time,
 		output reg [COUNTER_WIDTH-1:0] sync_B_time,
 		output reg [COUNTER_WIDTH-1:0] sweep_time,
 		output reg complete
 		);
 
-	parameter COUNTER_WIDTH = 32;
-
-	parameter CLOCKS_PER_US = 16;
-
+	localparam TIMEOUT_SYNC_A = 32'd4300*CLOCKS_PER_US;
 	localparam TIMEOUT_SYNC_B = 32'd600*CLOCKS_PER_US;
 	localparam TIMEOUT_SWEEP = 32'd7000*CLOCKS_PER_US;
 
+	localparam SYNC_PULSE_MIN = 32'd62*CLOCKS_PER_US;
 
 	localparam PULSE_SYNC_A = 2'b01;
 	localparam PULSE_SYNC_B = 2'b10;
@@ -63,25 +65,17 @@ module LighthouseTimer(
 		.clk(clk),
 		.result(pulseTimerResult)
 		);
-
-	initial sync_A_time = 32'd0;
-	initial sync_B_time = 32'd0;
-	initial sweep_time = 32'd0;
-	initial complete = 0;
-
-	initial phase = PHASE_WAIT;
-	initial pulse = PULSE_SYNC_A;
-
-	initial timeout = TIMEOUT_SYNC_B;
-
-	initial complete = 0;
-
-	initial delayTimerEnable = 0;
-	initial delayTimerReset = 1;
-	initial pulseTimerEnable = 0;
-	initial pulseTimerReset = 1;
 	
 	always @(posedge clk) begin
+		if( reset ) begin
+			resetTask();
+		end
+		else begin
+			runTask();
+		end
+	end
+
+	task runTask; begin
 		case (phase)
 
 			PHASE_WAIT: begin
@@ -92,9 +86,8 @@ module LighthouseTimer(
 					end
 				if( fallDetected ) begin
 					if (pulse == PULSE_SYNC_A) begin
-						complete <= 0;
 						resetTask();
-						delayTimerReset <= 1;
+						delayTimerEnable <= 1;
 						end
 					// Start pulse timer
 					pulseTimerReset <= 0;
@@ -120,12 +113,26 @@ module LighthouseTimer(
 			PHASE_PULSE_COMPLETE: begin
 				case (pulse)
 					PULSE_SYNC_A: begin
-						sync_A_time <= pulseTimerResult;
-						pulse <= PULSE_SYNC_B;
+						if( pulseTimerResult < SYNC_PULSE_MIN ) begin
+							// Unsynchronised
+							resetTask();
+							end
+						else begin
+							sync_A_time <= pulseTimerResult;
+							timeout <= TIMEOUT_SYNC_B;
+							pulse <= PULSE_SYNC_B;
+							end
 						end
 					PULSE_SYNC_B: begin
-						sync_B_time <= pulseTimerResult;
-						pulse <= PULSE_SWEEP;
+						if( pulseTimerResult < SYNC_PULSE_MIN ) begin
+							// Unsynchronised
+							resetTask();
+							end
+						else begin
+							sync_B_time <= pulseTimerResult;
+							pulse <= PULSE_SWEEP;
+							timeout <= TIMEOUT_SWEEP;
+							end
 						end
 					PULSE_SWEEP: begin
 						sweep_time <= delayTimerResult - (pulseTimerResult >> 1);
@@ -142,40 +149,39 @@ module LighthouseTimer(
 				case (pulse)
 					PULSE_SYNC_A: begin
 						// No sync, maybe occluded, reset all and try again
-						delayTimerEnable <= 0;
-						delayTimerReset <= 1;
-						pulseTimerEnable <= 0;
-						pulseTimerReset <= 1;
-						phase <= PHASE_WAIT;
+						resetTask();
 						end
 					PULSE_SYNC_B: begin
 						// This is OK, we may not have a B sync, attempt to detect pulse
 						sync_B_time <= 0;
-						timeout = TIMEOUT_SWEEP;
+						timeout <= TIMEOUT_SWEEP;
 						pulse <= PULSE_SWEEP;
 						phase <= PHASE_WAIT;
 						end
 					PULSE_SWEEP: begin
 						// No pulse, may be occluded, reset all and try again
-						delayTimerEnable <= 0;
-						delayTimerReset <= 1;
-						pulseTimerEnable <= 0;
-						pulseTimerReset <= 1;
-						phase <= PHASE_WAIT;
-						pulse <= PULSE_SYNC_A;
+						resetTask();
 						end
 					endcase
 				end
 
 			endcase
 		end
+	endtask
 
-	task resetTask;
-		begin
-			sync_A_time <= 0;
-			sync_B_time <= 0;
-			sweep_time <= 0;
-			end
-		endtask
+	task resetTask; begin
+		complete <= 0;
+		sync_A_time <= 0;
+		sync_B_time <= 0;
+		sweep_time <= 0;
+		delayTimerEnable <= 0;
+		delayTimerReset <= 1;
+		pulseTimerEnable <= 0;
+		pulseTimerReset <= 1;
+		phase <= PHASE_WAIT;
+		pulse <= PULSE_SYNC_A;
+		timeout <= TIMEOUT_SYNC_A;
+		end
+	endtask
 
 endmodule

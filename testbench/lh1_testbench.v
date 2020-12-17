@@ -14,6 +14,7 @@ module lh1_testbench();
 	reg envelope;
 	reg data;
 	reg clk;
+	reg reset;
 
 	wire [31:0] sync_A_time;
 	wire [31:0] sync_B_time;
@@ -24,6 +25,7 @@ module lh1_testbench();
 		.envelope(envelope),
 		.data(data),
 		.clk(clk),
+		.reset(reset),
 		.sync_A_time(sync_A_time),
 		.sync_B_time(sync_B_time),
 		.sweep_time(sweep_time),
@@ -34,11 +36,20 @@ module lh1_testbench();
 	localparam CLOCK_PERIOD = 6250;
 
 	initial clk = 0;
-	always #(CLOCK_PERIOD/2) clk = ~clk;	
+	always #(CLOCK_PERIOD/2) clk = ~clk;
+
+	initial reset = 0;
 
 	initial begin
 		$dumpfile("test.vcd");
 		$dumpvars(0,lhTimer);
+
+		$display("Holding reset");
+
+		reset <= 1;
+		repeat (10) @(posedge clk);
+		reset <= 0;
+
 		$display("Starting LH input tests");
 
 		$display("Starting sync single sweep");
@@ -118,6 +129,50 @@ module lh1_testbench();
 		#(CYCLE_LENGTH-(SYNC_B_DELAY+SYNC_B_LENGTH));
 
 		$display("Missing sweep test complete:");
+		$display(sync_A_time);
+		$display(sync_B_time);
+		$display(sweep_time);
+
+		$display("Starting missing sync test");
+
+		// Initial sweep delay
+		#(SWEEP_DELAY)
+
+		// Sweep pulse
+		envelope <= 0;
+		#(SWEEP_LENGTH);
+		envelope <= 1;
+
+		// End of cycle delay
+		#(CYCLE_LENGTH-(SWEEP_DELAY+SWEEP_LENGTH));
+
+		$display("Missing sync complete, normal sweep starting");
+
+		// Sync A pulse
+		envelope <= 0;
+		#(SYNC_A_LENGTH);
+		envelope <= 1;
+		
+		// Inter sync delay
+		#(SYNC_B_DELAY-SYNC_A_LENGTH);
+
+		// Sync B pulse
+		envelope <= 0;
+		#(SYNC_B_LENGTH);
+		envelope <= 1;
+
+		// Sweep delay
+		#(SWEEP_DELAY-(SYNC_B_DELAY+SYNC_B_LENGTH));
+		
+		// Sweep pulse
+		envelope <= 0;
+		#(SWEEP_LENGTH);
+		envelope <= 1;
+
+		// End of cycle delay
+		#(CYCLE_LENGTH-(SWEEP_DELAY+SWEEP_LENGTH));
+
+		$display("Missing sync test complete:");
 		$display(sync_A_time);
 		$display(sync_B_time);
 		$display(sweep_time);

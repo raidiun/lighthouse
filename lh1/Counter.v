@@ -1,4 +1,6 @@
-module Counter(
+module Counter #(
+		parameter WIDTH = 16
+	) (
 		input enable,
 		input reset,
 		input clk,
@@ -8,8 +10,6 @@ module Counter(
 	/*
 	Counts up on clk while enable is asserted. Goes to 0 on reset assertion
 	*/
-	
-	parameter WIDTH = 16;
 	
 	always @(posedge clk) begin
 		if (reset) begin
